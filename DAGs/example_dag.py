@@ -1,13 +1,12 @@
 from airflow import DAG
-from airflow.operators.python_operator import PythonOperator
-from datetime import datetime, timedelta
+from airflow.operators.python import PythonOperator
 from airflow.utils.dates import days_ago
+from datetime import timedelta
 import pandas as pd
 import requests
 import psycopg2
 import ta  # technical analysis kütüphanesi
 
-# DAG args
 default_args = {
     'owner': 'kagan',
     'depends_on_past': False,
@@ -20,10 +19,9 @@ dag = DAG(
     'btc_technical_indicators',
     default_args=default_args,
     description='Fetch BTCUSDT OHLCV and calculate SMA, EMA, RSI',
-    schedule_interval='*/5 * * * *',  # 5 dakikada bir
+    schedule_interval='*/5 * * * *',
 )
 
-# Binance API'den veri çekme
 def fetch_ohlcv():
     url = "https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=100"
     response = requests.get(url)
@@ -44,9 +42,7 @@ def fetch_ohlcv():
     df['rsi'] = ta.momentum.RSIIndicator(df['close'], window=14).rsi()
     
     df_to_insert = df[['open_time', 'open', 'high', 'low', 'close', 'volume', 'sma', 'ema', 'rsi']]
-    df_to_insert.rename(columns={'open_time':'open_time'}, inplace=True)
     
-    # Neon DB'ye kaydetme
     conn = psycopg2.connect(
         host="ep-nameless-surf-aecj97d7-pooler.c-2.us-east-2.aws.neon.tech",
         dbname="neondb",
@@ -56,7 +52,6 @@ def fetch_ohlcv():
     )
     
     cur = conn.cursor()
-    
     for _, row in df_to_insert.iterrows():
         cur.execute("""
             INSERT INTO btc_usdt_technical (open_time, open, high, low, close, volume, sma, ema, rsi)
@@ -71,7 +66,6 @@ def fetch_ohlcv():
     cur.close()
     conn.close()
 
-# DAG task
 task_fetch = PythonOperator(
     task_id='fetch_btc_data',
     python_callable=fetch_ohlcv,
