@@ -1,1 +1,4 @@
 pandas
+ta
+psycopg2-binary
+requests
