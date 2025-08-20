@@ -10,7 +10,7 @@ import ta  # technical analysis kütüphanesi
 default_args = {
     'owner': 'kagan',
     'depends_on_past': False,
-    'start_date': datetime(2025, 8, 20),
+    'start_date': datetime(2025, 8, 19),
     'retries': 1,
     'retry_delay': timedelta(minutes=1)
 }
