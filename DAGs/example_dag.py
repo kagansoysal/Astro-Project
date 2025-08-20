@@ -6,14 +6,24 @@ import pandas as pd
 import requests
 import psycopg2
 import ta  # technical analysis kütüphanesi
+from datetime import datetime
 
 default_args = {
     'owner': 'kagan',
     'depends_on_past': False,
-    'start_date': days_ago(1),
+    'start_date': datetime.utcnow(),  # şu an UTC zamanı
     'retries': 1,
     'retry_delay': timedelta(minutes=1)
 }
+
+dag = DAG(
+    'btc_technical_indicators',
+    default_args=default_args,
+    description='Fetch BTCUSDT OHLCV and calculate SMA, EMA, RSI',
+    schedule_interval='*/5 * * * *',
+    catchup=False  # geçmişi doldurma
+)
+
 
 dag = DAG(
     'btc_technical_indicators',
