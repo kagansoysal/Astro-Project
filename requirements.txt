@@ -1,4 +1,4 @@
 pandas
 requests
-psycopg2-binary
+psycopg2
 ta
