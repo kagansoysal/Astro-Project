@@ -1,6 +1,7 @@
 from airflow import DAG
 from airflow.operators.python_operator import PythonOperator
 from datetime import datetime, timedelta
+from airflow.utils.dates import days_ago
 import pandas as pd
 import requests
 import psycopg2
@@ -10,7 +11,7 @@ import ta  # technical analysis kütüphanesi
 default_args = {
     'owner': 'kagan',
     'depends_on_past': False,
-    'start_date': datetime(2025, 8, 19),
+    'start_date': days_ago(1),
     'retries': 1,
     'retry_delay': timedelta(minutes=1)
 }
