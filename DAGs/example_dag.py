@@ -53,18 +53,19 @@ def fetch_ohlcv():
     
     cur = conn.cursor()
     for _, row in df_to_insert.iterrows():
-    cur.execute("""
-        INSERT INTO btc_usdt_technical (open_time, open, high, low, close, volume, sma, ema, rsi)
-        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)
-        ON CONFLICT (open_time) DO UPDATE 
-        SET open=EXCLUDED.open, high=EXCLUDED.high, low=EXCLUDED.low,
-            close=EXCLUDED.close, volume=EXCLUDED.volume,
-            sma=EXCLUDED.sma, ema=EXCLUDED.ema, rsi=EXCLUDED.rsi
-    """, (
-        row['open_time'].to_pydatetime(),  # timestamp’i datetime’a çevir
-        row['open'], row['high'], row['low'], row['close'],
-        row['volume'], row['sma'], row['ema'], row['rsi']
-    ))
+        cur.execute("""
+            INSERT INTO btc_usdt_technical (open_time, open, high, low, close, volume, sma, ema, rsi)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)
+            ON CONFLICT (open_time) DO UPDATE 
+            SET open=EXCLUDED.open, high=EXCLUDED.high, low=EXCLUDED.low,
+                close=EXCLUDED.close, volume=EXCLUDED.volume,
+                sma=EXCLUDED.sma, ema=EXCLUDED.ema, rsi=EXCLUDED.rsi
+        """, (
+            row['open_time'].to_pydatetime(),
+            row['open'], row['high'], row['low'], row['close'],
+            row['volume'], row['sma'], row['ema'], row['rsi']
+        ))
+
 
     
     conn.commit()
