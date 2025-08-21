@@ -12,7 +12,7 @@ def fetch_ohlcv(ti):
     Yahoo Finance'ten BTC-USD OHLCV verisi çek
     """
     ticker = yf.Ticker("BTC-USD")
-    df = ticker.history(interval="5m", period="2d")  # son 2 gün, 5 dakikalık barlar
+    df = ticker.history(interval="5m", period="2d")  # son 2 gün, 5 dakikalık barlar.
 
     df = df.reset_index()
     df = df.rename(columns={
