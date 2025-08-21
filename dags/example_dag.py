@@ -61,7 +61,6 @@ def fetch_ohlcv():
         user="neondb_owner",
         password="npg_gqbu0E7WskxX",
         port="5432",
-        sslmode="require"
     )
     
     cur = conn.cursor()
