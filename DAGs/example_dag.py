@@ -24,14 +24,6 @@ dag = DAG(
     catchup=False  # geçmişi doldurma
 )
 
-
-dag = DAG(
-    'btc_technical_indicators',
-    default_args=default_args,
-    description='Fetch BTCUSDT OHLCV and calculate SMA, EMA, RSI',
-    schedule_interval='*/5 * * * *',
-)
-
 def fetch_ohlcv():
     url = "https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=100"
     response = requests.get(url)
