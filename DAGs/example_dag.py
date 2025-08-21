@@ -6,12 +6,12 @@ import pandas as pd
 import requests
 import psycopg2
 import ta  # technical analysis kütüphanesi
-from datetime import datetime
+from airflow.utils.dates import days_ago
 
 default_args = {
     'owner': 'kagan',
     'depends_on_past': False,
-    'start_date': datetime.utcnow(),  # şu an UTC zamanı
+    'start_date': days_ago(0),  # şimdiden başlat
     'retries': 1,
     'retry_delay': timedelta(minutes=1)
 }
@@ -21,8 +21,9 @@ dag = DAG(
     default_args=default_args,
     description='Fetch BTCUSDT OHLCV and calculate SMA, EMA, RSI',
     schedule_interval='*/5 * * * *',
-    catchup=False  # geçmişi doldurma
+    catchup=False
 )
+
 
 def fetch_ohlcv():
     url = "https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=100"
@@ -77,5 +78,4 @@ def fetch_ohlcv():
 task_fetch = PythonOperator(
     task_id='fetch_btc_data',
     python_callable=fetch_ohlcv,
-    dag=dag
-)
+    dag=dag)
