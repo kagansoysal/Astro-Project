@@ -1,28 +1,25 @@
-from airflow import DAG
-from airflow.operators.python import PythonOperator
-from airflow.utils.dates import days_ago
-from datetime import timedelta
 import pandas as pd
 import requests
 import psycopg2
 import ta  # technical analysis kütüphanesi
+from datetime import datetime, timedelta
+from airflow import DAG
+from airflow.operators.python import PythonOperator
 
-# Default arguments
 default_args = {
     'owner': 'kagan',
     'depends_on_past': False,
-    'start_date': days_ago(0),   # şu andan itibaren başla
+    'start_date': datetime.utcnow(),  # şu an UTC zamanı
     'retries': 1,
     'retry_delay': timedelta(minutes=1)
 }
 
-# DAG tanımı
 dag = DAG(
     'btc_technical_indicators',
     default_args=default_args,
     description='Fetch BTCUSDT OHLCV and calculate SMA, EMA, RSI',
-    schedule_interval='*/5 * * * *',  # her 5 dakikada bir çalışır
-    catchup=False  # geçmişi doldurma
+    schedule_interval='*/5 * * * *',
+    catchup=False
 )
 
 def fetch_ohlcv():
