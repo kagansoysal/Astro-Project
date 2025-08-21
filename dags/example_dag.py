@@ -3,28 +3,10 @@ from airflow.operators.python import PythonOperator
 from datetime import datetime, timedelta
 import requests
 import pandas as pd
+import numpy as np
 import psycopg2
 from psycopg2.extras import execute_values
 
-# --- Default Args ---
-default_args = {
-    'owner': 'kagan',
-    'depends_on_past': False,
-    'start_date': datetime(2025, 1, 1),
-    'retries': 1,
-    'retry_delay': timedelta(minutes=1)
-}
-
-# --- DAG Tanımı ---
-dag = DAG(
-    'btc_technical_indicators',
-    default_args=default_args,
-    description='Fetch BTCUSDT OHLCV and calculate SMA, EMA, RSI',
-    schedule='*/5 * * * *',  # her 5 dakikada bir
-    catchup=False
-)
-
-# --- 1. Fetch Task ---
 def fetch_ohlcv(ti):
     url = "https://api.binance.com/api/v3/klines"
     params = {
@@ -33,12 +15,7 @@ def fetch_ohlcv(ti):
         "limit": 500
     }
     response = requests.get(url, params=params)
-    
-    if response.status_code != 200:
-        raise Exception(f"Binance API Error: {response.status_code} - {response.text}")
-
     data = response.json()
-    print(f"Fetched {len(data)} rows from Binance")
 
     df = pd.DataFrame(data, columns=[
         "open_time", "open", "high", "low", "close", "volume",
@@ -53,19 +30,15 @@ def fetch_ohlcv(ti):
     df["close"] = df["close"].astype(float)
     df["volume"] = df["volume"].astype(float)
 
-    # XCom’a gönder
     ti.xcom_push(key='ohlcv_df', value=df.to_json())
 
-# --- 2. Indicator Calculation Task ---
 def calculate_indicators(ti):
     df_json = ti.xcom_pull(key='ohlcv_df', task_ids='fetch_ohlcv')
     df = pd.read_json(df_json)
 
-    # SMA & EMA
     df['sma'] = df['close'].rolling(window=14).mean()
     df['ema'] = df['close'].ewm(span=14, adjust=False).mean()
 
-    # RSI
     delta = df['close'].diff()
     gain = delta.where(delta > 0, 0)
     loss = -delta.where(delta < 0, 0)
@@ -74,17 +47,12 @@ def calculate_indicators(ti):
     rs = avg_gain / avg_loss
     df['rsi'] = 100 - (100 / (1 + rs))
 
-    print("Indicators calculated. Sample:")
-    print(df[['open_time','close','sma','ema','rsi']].tail(5))
-
     ti.xcom_push(key='indicators_df', value=df.to_json())
 
-# --- 3. Insert to DB Task ---
 def insert_to_postgres(ti):
     df_json = ti.xcom_pull(key='indicators_df', task_ids='calculate_indicators')
     df = pd.read_json(df_json)
 
-    print("Connecting to NeonDB...")
     conn = psycopg2.connect(
         host="ep-nameless-surf-aecj97d7-pooler.c-2.us-east-2.aws.neon.tech",
         port=5432,
@@ -127,26 +95,35 @@ def insert_to_postgres(ti):
     conn.commit()
     cursor.close()
     conn.close()
-    print("Finished inserting rows into NeonDB.")
 
-# --- Task Definitions ---
-fetch_task = PythonOperator(
-    task_id='fetch_ohlcv',
-    python_callable=fetch_ohlcv,
-    dag=dag
-)
+default_args = {
+    'owner': 'beste',
+    'depends_on_past': False,
+    'retries': 1,
+    'retry_delay': timedelta(minutes=1),
+}
 
-calc_task = PythonOperator(
-    task_id='calculate_indicators',
-    python_callable=calculate_indicators,
-    dag=dag
-)
+with DAG(
+    dag_id='btc_technical_indicators',
+    schedule='*/5 * * * *',
+    start_date=datetime(2025, 1, 1),
+    catchup=False,
+    default_args=default_args,
+) as dag:
 
-insert_task = PythonOperator(
-    task_id='insert_to_postgres',
-    python_callable=insert_to_postgres,
-    dag=dag
-)
+    fetch_task = PythonOperator(
+        task_id='fetch_ohlcv',
+        python_callable=fetch_ohlcv,
+    )
 
-# --- Dependency Chain ---
-fetch_task >> calc_task >> insert_task
+    calc_task = PythonOperator(
+        task_id='calculate_indicators',
+        python_callable=calculate_indicators,
+    )
+
+    insert_task = PythonOperator(
+        task_id='insert_to_postgres',
+        python_callable=insert_to_postgres,
+    )
+
+    fetch_task >> calc_task >> insert_task
