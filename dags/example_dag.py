@@ -11,7 +11,7 @@ import ta  # technical analysis kütüphanesi
 default_args = {
     'owner': 'kagan',
     'depends_on_past': False,
-    'start_date': days_ago(0),   # şu andan itibaren başlat
+    'start_date': days_ago(0),   # şu andan itibaren başla
     'retries': 1,
     'retry_delay': timedelta(minutes=1)
 }
