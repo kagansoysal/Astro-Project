@@ -3,8 +3,8 @@ from airflow.operators.python import PythonOperator
 from datetime import datetime, timedelta
 import pandas as pd
 import psycopg2
-import yfinance as yf
 from psycopg2.extras import execute_values
+import yfinance as yf
 
 
 def fetch_ohlcv(ti):
