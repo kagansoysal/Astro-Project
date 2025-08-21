@@ -6,24 +6,24 @@ import pandas as pd
 import requests
 import psycopg2
 import ta  # technical analysis kütüphanesi
-from airflow.utils.dates import days_ago
 
+# Default arguments
 default_args = {
     'owner': 'kagan',
     'depends_on_past': False,
-    'start_date': days_ago(0),  # şimdiden başlat
+    'start_date': days_ago(0),   # şu andan itibaren başlat
     'retries': 1,
     'retry_delay': timedelta(minutes=1)
 }
 
+# DAG tanımı
 dag = DAG(
     'btc_technical_indicators',
     default_args=default_args,
     description='Fetch BTCUSDT OHLCV and calculate SMA, EMA, RSI',
-    schedule_interval='*/5 * * * *',
-    catchup=False
+    schedule_interval='*/5 * * * *',  # her 5 dakikada bir çalışır
+    catchup=False  # geçmişi doldurma
 )
-
 
 def fetch_ohlcv():
     url = "https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=100"
@@ -46,6 +46,7 @@ def fetch_ohlcv():
     
     df_to_insert = df[['open_time', 'open', 'high', 'low', 'close', 'volume', 'sma', 'ema', 'rsi']]
     
+    # PostgreSQL bağlantısı
     conn = psycopg2.connect(
         host="ep-nameless-surf-aecj97d7-pooler.c-2.us-east-2.aws.neon.tech",
         dbname="neondb",
@@ -63,19 +64,17 @@ def fetch_ohlcv():
             SET open=EXCLUDED.open, high=EXCLUDED.high, low=EXCLUDED.low,
                 close=EXCLUDED.close, volume=EXCLUDED.volume,
                 sma=EXCLUDED.sma, ema=EXCLUDED.ema, rsi=EXCLUDED.rsi
-        """, (
-            row['open_time'].to_pydatetime(),
+        """, (row['open_time'].to_pydatetime(),
             row['open'], row['high'], row['low'], row['close'],
-            row['volume'], row['sma'], row['ema'], row['rsi']
-        ))
+            row['volume'], row['sma'], row['ema'], row['rsi']))
 
-
-    
     conn.commit()
     cur.close()
     conn.close()
 
+# Task tanımı
 task_fetch = PythonOperator(
     task_id='fetch_btc_data',
     python_callable=fetch_ohlcv,
-    dag=dag)
+    dag=dag
+)
