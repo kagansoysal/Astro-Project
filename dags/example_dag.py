@@ -18,9 +18,10 @@ dag = DAG(
     'btc_technical_indicators',
     default_args=default_args,
     description='Fetch BTCUSDT OHLCV and calculate SMA, EMA, RSI',
-    schedule_interval='*/5 * * * *',  # 5 dakikada bir çalışır
+    schedule='*/5 * * * *',  # 5 dakikada bir çalışır
     catchup=False
 )
+
 
 def fetch_ohlcv():
     # Binance API'den veri çek
