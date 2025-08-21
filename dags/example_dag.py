@@ -13,27 +13,45 @@ def get_binance_data(ti):
     url = "https://api.binance.com/api/v3/klines"
     params = {"symbol": "BTCUSDT", "interval": "5m", "limit": 500}
     resp = requests.get(url, params=params)
-    if resp.status_code != 200:
-        raise Exception(f"Binance API error: {resp.status_code}")
-    raw = resp.json()
 
-    df = pd.DataFrame(raw, columns=[
-        "open_time","open","high","low","close","volume",
-        "close_time","quote_asset_volume","trades",
-        "taker_buy_base","taker_buy_quote","ignore"
-    ])
+    if resp.status_code == 200:
+        raw = resp.json()
+        print("[FETCH] Binance verisi alındı.")
+        df = pd.DataFrame(raw, columns=[
+            "open_time","open","high","low","close","volume",
+            "close_time","quote_asset_volume","trades",
+            "taker_buy_base","taker_buy_quote","ignore"
+        ])
+        df["open_time"] = pd.to_datetime(df["open_time"], unit="ms")
+        float_cols = ["open","high","low","close","volume"]
+        df[float_cols] = df[float_cols].astype(float)
 
-    # tip dönüşümleri
-    df["open_time"] = pd.to_datetime(df["open_time"], unit="ms")
-    float_cols = ["open","high","low","close","volume"]
-    df[float_cols] = df[float_cols].astype(float)
+    else:
+        print(f"[WARN] Binance API hata verdi ({resp.status_code}). CoinGecko'ya geçiliyor...")
+        cg_url = "https://api.coingecko.com/api/v3/coins/bitcoin/market_chart"
+        cg_params = {"vs_currency": "usd", "days": "2", "interval": "5m"}
+        cg_resp = requests.get(cg_url, params=cg_params)
+        if cg_resp.status_code != 200:
+            raise Exception(f"CoinGecko da hata verdi: {cg_resp.status_code}")
+        data = cg_resp.json()
 
-    print(f"[FETCH] {len(df)} satır çekildi. İlk satır:\n{df.head(1)}")
+        # CoinGecko sadece fiyat + hacim verir, OHLC yok
+        prices = pd.DataFrame(data["prices"], columns=["ts", "price"])
+        vols = pd.DataFrame(data["total_volumes"], columns=["ts", "volume"])
+        df = prices.merge(vols, on="ts")
+        df["open_time"] = pd.to_datetime(df["ts"], unit="ms")
+        df["close"] = df["price"]
+        df["open"] = df["close"]
+        df["high"] = df["close"]
+        df["low"] = df["close"]
+        df.drop(columns=["ts","price"], inplace=True)
+        print("[FETCH] CoinGecko verisi alındı (OHLC dummy).")
 
-    # XCom’a base64-parquet string olarak koy
+    # XCom’a gönder
     buf = io.BytesIO()
     df.to_parquet(buf, index=False)
     ti.xcom_push(key="ohlcv_data", value=base64.b64encode(buf.getvalue()).decode())
+
 
 # --- 2. İndikatör hesaplama ---
 def enrich_with_indicators(ti):
