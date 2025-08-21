@@ -1,7 +1,7 @@
 import pandas as pd
 import requests
 import psycopg2
-import ta  # technical analysis kütüphanesi
+import ta  # technical analysis kütüphanes
 from datetime import datetime, timedelta
 from airflow import DAG
 from airflow.operators.python import PythonOperator
