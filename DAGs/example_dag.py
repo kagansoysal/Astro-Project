@@ -48,12 +48,14 @@ def fetch_ohlcv():
     
     # PostgreSQL bağlantısı
     conn = psycopg2.connect(
-        host="ep-nameless-surf-aecj97d7-pooler.c-2.us-east-2.aws.neon.tech",
-        dbname="neondb",
-        user="neondb_owner",
-        password="npg_gqbu0E7WskxX",
-        port="5432"
+    host="ep-nameless-surf-aecj97d7-pooler.c-2.us-east-2.aws.neon.tech",
+    dbname="neondb",
+    user="neondb_owner",
+    password="npg_gqbu0E7WskxX",
+    port="5432",
+    sslmode="require"   # 🔑 ekle
     )
+    
     
     cur = conn.cursor()
     for _, row in df_to_insert.iterrows():
