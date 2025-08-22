@@ -126,7 +126,7 @@ default_args = {
 
 @dag(
     dag_id="btc_technical_indicators",
-    schedule_interval="*/5 * * * *",
+    schedule="*/5 * * * *",
     start_date=datetime(2025, 1, 1),
     catchup=False,
     default_args=default_args,
