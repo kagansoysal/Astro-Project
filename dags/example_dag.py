@@ -1,5 +1,4 @@
-from airflow import DAG
-from airflow.operators.python import PythonOperator
+from airflow.decorators import dag, task
 from datetime import datetime, timedelta
 import requests
 import pandas as pd
@@ -7,7 +6,16 @@ import numpy as np
 import psycopg2
 from psycopg2.extras import execute_values
 
-def _fetch_ohlcv(ti):
+default_args = {
+    'owner': 'kagan',
+    'depends_on_past': False,
+    'retries': 1,
+    'retry_delay': timedelta(minutes=1),
+}
+
+# =============== LOGIC FUNCTIONS ===============
+
+def fetch_ohlcv_logic():
     url = "https://api.binance.com/api/v3/klines"
     params = {
         "symbol": "BTCUSDT",
@@ -17,7 +25,7 @@ def _fetch_ohlcv(ti):
     response = requests.get(url, params=params)
     data = response.json()
 
-    print(f"[fetch_ohlcv] Binance'ten {len(data)} satır geldi")
+    print(f"[fetch_ohlcv] Binance returned {len(data)} rows")
 
     df = pd.DataFrame(data, columns=[
         "open_time", "open", "high", "low", "close", "volume",
@@ -32,20 +40,17 @@ def _fetch_ohlcv(ti):
     df["close"] = df["close"].astype(float)
     df["volume"] = df["volume"].astype(float)
 
-    print("[fetch_ohlcv] Response status:", response.status_code)
-    print("[fetch_ohlcv] Data uzunluğu:", len(data))
-    print("[fetch_ohlcv] DataFrame shape:", df.shape)
+    print("[fetch_ohlcv] Status:", response.status_code)
+    print("[fetch_ohlcv] Shape:", df.shape)
+    print("[fetch_ohlcv] Head:\n", df.head(3))
+
+    return df.to_json()  # return JSON instead of ti.xcom_push
 
 
-    print("[fetch_ohlcv] İlk 3 satır:\n", df.head(3))
-
-    ti.xcom_push(key='ohlcv_df', value=df.to_json())
-
-def _calculate_indicators(ti):
-    df_json = ti.xcom_pull(key='ohlcv_df', task_ids='fetch_ohlcv')
+def calculate_indicators_logic(df_json):
     df = pd.read_json(df_json)
 
-    print(f"[calculate_indicators] DataFrame boyut: {df.shape}")
+    print(f"[calculate_indicators] Shape: {df.shape}")
 
     df['sma'] = df['close'].rolling(window=14).mean()
     df['ema'] = df['close'].ewm(span=14, adjust=False).mean()
@@ -58,15 +63,14 @@ def _calculate_indicators(ti):
     rs = avg_gain / avg_loss
     df['rsi'] = 100 - (100 / (1 + rs))
 
-    print("[calculate_indicators] İlk 3 satır (indikatörlerle):\n", df[['close','sma','ema','rsi']].head(3))
+    print("[calculate_indicators] Head:\n", df[['close','sma','ema','rsi']].head(3))
 
-    ti.xcom_push(key='indicators_df', value=df.to_json())
+    return df.to_json()  # return JSON instead of ti.xcom_push
 
-def _insert_to_postgres(ti):
-    df_json = ti.xcom_pull(key='indicators_df', task_ids='calculate_indicators')
+
+def insert_to_postgres_logic(df_json):
     df = pd.read_json(df_json)
-
-    print(f"[insert_to_postgres] DB'ye yazılacak satır sayısı: {len(df)}")
+    print(f"[insert_to_postgres] Rows to insert: {len(df)}")
 
     conn = psycopg2.connect(
         host="ep-nameless-surf-aecj97d7-pooler.c-2.us-east-2.aws.neon.tech",
@@ -78,9 +82,8 @@ def _insert_to_postgres(ti):
     )
     cursor = conn.cursor()
 
-    records = []
-    for _, row in df.iterrows():
-        records.append((
+    records = [
+        (
             row['open_time'],
             row['open'],
             row['high'],
@@ -90,7 +93,9 @@ def _insert_to_postgres(ti):
             row['sma'],
             row['ema'],
             row['rsi'],
-        ))
+        )
+        for _, row in df.iterrows()
+    ]
 
     sql = """
         INSERT INTO btc_usdt_technical
@@ -111,22 +116,13 @@ def _insert_to_postgres(ti):
     cursor.close()
     conn.close()
 
-    print(f"[insert_to_postgres] {len(records)} satır DB'ye işlendi ✅")
+    print(f"[insert_to_postgres] {len(records)} rows inserted ✅")
 
-
-from airflow.decorators import dag, task
-from datetime import datetime, timedelta
-
-default_args = {
-    'owner': 'kagan',
-    'depends_on_past': False,
-    'retries': 1,
-    'retry_delay': timedelta(minutes=1),
-}
+# =============== DAG DEFINITION ===============
 
 @dag(
     dag_id="btc_technical_indicators",
-    schedule="*/5 * * * *",
+    schedule_interval="*/5 * * * *",
     start_date=datetime(2025, 1, 1),
     catchup=False,
     default_args=default_args,
@@ -135,20 +131,19 @@ def btc_pipeline():
 
     @task()
     def fetch_ohlcv():
-        return _fetch_ohlcv()   # call your function
+        return fetch_ohlcv_logic()
 
     @task()
     def calculate_indicators(df_json):
-        return _calculate_indicators(df_json)
+        return calculate_indicators_logic(df_json)
 
     @task()
     def insert_to_postgres(df_json):
-        _insert_to_postgres(df_json)
+        insert_to_postgres_logic(df_json)
 
-    # Define dependencies with function calls
+    # dependencies via function calls
     raw_data = fetch_ohlcv()
     indicators = calculate_indicators(raw_data)
     insert_to_postgres(indicators)
 
 dag = btc_pipeline()
-
