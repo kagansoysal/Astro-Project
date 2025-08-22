@@ -33,7 +33,6 @@ def fetch_ohlcv(ti):
     df["volume"] = df["volume"].astype(float)
 
     print("[fetch_ohlcv] Response status:", response.status_code)
-    print("[fetch_ohlcv] Raw response:", data[:3])  # ilk 3 satırını yaz
     print("[fetch_ohlcv] Data uzunluğu:", len(data))
     print("[fetch_ohlcv] DataFrame shape:", df.shape)
 
