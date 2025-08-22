@@ -17,6 +17,8 @@ def fetch_ohlcv(ti):
     response = requests.get(url, params=params)
     data = response.json()
 
+    print(f"[fetch_ohlcv] Binance'ten {len(data)} satır geldi")
+
     df = pd.DataFrame(data, columns=[
         "open_time", "open", "high", "low", "close", "volume",
         "close_time", "quote_asset_volume", "number_of_trades",
@@ -30,11 +32,15 @@ def fetch_ohlcv(ti):
     df["close"] = df["close"].astype(float)
     df["volume"] = df["volume"].astype(float)
 
+    print("[fetch_ohlcv] İlk 3 satır:\n", df.head(3))
+
     ti.xcom_push(key='ohlcv_df', value=df.to_json())
 
 def calculate_indicators(ti):
     df_json = ti.xcom_pull(key='ohlcv_df', task_ids='fetch_ohlcv')
     df = pd.read_json(df_json)
+
+    print(f"[calculate_indicators] DataFrame boyut: {df.shape}")
 
     df['sma'] = df['close'].rolling(window=14).mean()
     df['ema'] = df['close'].ewm(span=14, adjust=False).mean()
@@ -47,11 +53,15 @@ def calculate_indicators(ti):
     rs = avg_gain / avg_loss
     df['rsi'] = 100 - (100 / (1 + rs))
 
+    print("[calculate_indicators] İlk 3 satır (indikatörlerle):\n", df[['close','sma','ema','rsi']].head(3))
+
     ti.xcom_push(key='indicators_df', value=df.to_json())
 
 def insert_to_postgres(ti):
     df_json = ti.xcom_pull(key='indicators_df', task_ids='calculate_indicators')
     df = pd.read_json(df_json)
+
+    print(f"[insert_to_postgres] DB'ye yazılacak satır sayısı: {len(df)}")
 
     conn = psycopg2.connect(
         host="ep-nameless-surf-aecj97d7-pooler.c-2.us-east-2.aws.neon.tech",
@@ -95,6 +105,8 @@ def insert_to_postgres(ti):
     conn.commit()
     cursor.close()
     conn.close()
+
+    print(f"[insert_to_postgres] {len(records)} satır DB'ye işlendi ✅")
 
 default_args = {
     'owner': 'kagan',
