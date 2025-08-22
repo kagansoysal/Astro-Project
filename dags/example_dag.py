@@ -6,37 +6,22 @@ import pandas as pd
 import numpy as np
 import psycopg2
 from psycopg2.extras import execute_values
+import yfinance as yf
 
 def fetch_ohlcv(ti):
-    url = "https://api.binance.com/api/v3/klines"
-    params = {
-        "symbol": "BTCUSDT",
-        "interval": "5m",
-        "limit": 500
-    }
-    response = requests.get(url, params=params)
-    data = response.json()
+    df = yf.download("BTC-USD", interval="5m", period="2d")  # 2 gün, 5 dakikalık veriler
+    df = df.reset_index()
 
-    print(f"[fetch_ohlcv] Binance'ten {len(data)} satır geldi")
+    df.rename(columns={
+        "Datetime": "open_time",
+        "Open": "open",
+        "High": "high",
+        "Low": "low",
+        "Close": "close",
+        "Volume": "volume"
+    }, inplace=True)
 
-    df = pd.DataFrame(data, columns=[
-        "open_time", "open", "high", "low", "close", "volume",
-        "close_time", "quote_asset_volume", "number_of_trades",
-        "taker_buy_base_asset_volume", "taker_buy_quote_asset_volume", "ignore"
-    ])
-
-    df["open_time"] = pd.to_datetime(df["open_time"], unit='ms')
-    df["open"] = df["open"].astype(float)
-    df["high"] = df["high"].astype(float)
-    df["low"] = df["low"].astype(float)
-    df["close"] = df["close"].astype(float)
-    df["volume"] = df["volume"].astype(float)
-
-    print("[fetch_ohlcv] Response status:", response.status_code)
-    print("[fetch_ohlcv] Data uzunluğu:", len(data))
-    print("[fetch_ohlcv] DataFrame shape:", df.shape)
-
-
+    print(f"[fetch_ohlcv] Yahoo Finance'ten {len(df)} satır geldi")
     print("[fetch_ohlcv] İlk 3 satır:\n", df.head(3))
 
     ti.xcom_push(key='ohlcv_df', value=df.to_json())
