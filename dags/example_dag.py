@@ -7,9 +7,8 @@ import numpy as np
 import psycopg2
 from psycopg2.extras import execute_values
 
-# === 1. Veri Çekme (Binance Futures API) ===
 def fetch_ohlcv(ti):
-    url = "https://fapi.binance.com/fapi/v1/klines"  # FUTURES API
+    url = "https://api.binance.com/api/v3/klines"
     params = {
         "symbol": "BTCUSDT",
         "interval": "5m",
@@ -18,10 +17,7 @@ def fetch_ohlcv(ti):
     response = requests.get(url, params=params)
     data = response.json()
 
-    if response.status_code != 200:
-        raise Exception(f"Binance Futures API error: {response.status_code}, response: {data}")
-
-    print(f"[fetch_ohlcv] Binance Futures'tan {len(data)} satır geldi")
+    print(f"[fetch_ohlcv] Binance'ten {len(data)} satır geldi")
 
     df = pd.DataFrame(data, columns=[
         "open_time", "open", "high", "low", "close", "volume",
@@ -36,22 +32,24 @@ def fetch_ohlcv(ti):
     df["close"] = df["close"].astype(float)
     df["volume"] = df["volume"].astype(float)
 
+    print("[fetch_ohlcv] Response status:", response.status_code)
+    print("[fetch_ohlcv] Data uzunluğu:", len(data))
+    print("[fetch_ohlcv] DataFrame shape:", df.shape)
+
+
     print("[fetch_ohlcv] İlk 3 satır:\n", df.head(3))
 
     ti.xcom_push(key='ohlcv_df', value=df.to_json())
 
-# === 2. İndikatör Hesaplama ===
 def calculate_indicators(ti):
     df_json = ti.xcom_pull(key='ohlcv_df', task_ids='fetch_ohlcv')
     df = pd.read_json(df_json)
 
     print(f"[calculate_indicators] DataFrame boyut: {df.shape}")
 
-    # SMA, EMA
     df['sma'] = df['close'].rolling(window=14).mean()
     df['ema'] = df['close'].ewm(span=14, adjust=False).mean()
 
-    # RSI
     delta = df['close'].diff()
     gain = delta.where(delta > 0, 0)
     loss = -delta.where(delta < 0, 0)
@@ -64,7 +62,6 @@ def calculate_indicators(ti):
 
     ti.xcom_push(key='indicators_df', value=df.to_json())
 
-# === 3. Postgres'e Yazma ===
 def insert_to_postgres(ti):
     df_json = ti.xcom_pull(key='indicators_df', task_ids='calculate_indicators')
     df = pd.read_json(df_json)
@@ -116,7 +113,6 @@ def insert_to_postgres(ti):
 
     print(f"[insert_to_postgres] {len(records)} satır DB'ye işlendi ✅")
 
-# === DAG Tanımı ===
 default_args = {
     'owner': 'kagan',
     'depends_on_past': False,
@@ -125,7 +121,7 @@ default_args = {
 }
 
 with DAG(
-    dag_id='btc_futures_technical_indicators',
+    dag_id='btc_technical_indicators',
     schedule='*/5 * * * *',
     start_date=datetime(2025, 1, 1),
     catchup=False,
