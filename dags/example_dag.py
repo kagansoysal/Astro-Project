@@ -54,11 +54,11 @@ def insert_to_postgres(ti):
     df = pd.read_json(df_json)
 
     conn = psycopg2.connect(
-        host="ep-late-bread-aer69fpl-pooler.c-2.us-east-2.aws.neon.tech",
+        host="ep-nameless-surf-aecj97d7-pooler.c-2.us-east-2.aws.neon.tech",
         port=5432,
         dbname="neondb",
         user="neondb_owner",
-        password="npg_be5kPz1AitFR",
+        password="npg_gqbu0E7WskxX",
         sslmode="require"
     )
     cursor = conn.cursor()
