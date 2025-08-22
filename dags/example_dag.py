@@ -6,35 +6,52 @@ import pandas as pd
 import numpy as np
 import psycopg2
 from psycopg2.extras import execute_values
-import yfinance as yf
 
+# === 1. Veri Çekme (Binance Futures API) ===
 def fetch_ohlcv(ti):
-    df = yf.download("BTC-USD", interval="5m", period="2d")  # 2 gün, 5 dakikalık veriler
-    df = df.reset_index()
+    url = "https://fapi.binance.com/fapi/v1/klines"  # FUTURES API
+    params = {
+        "symbol": "BTCUSDT",
+        "interval": "5m",
+        "limit": 500
+    }
+    response = requests.get(url, params=params)
+    data = response.json()
 
-    df.rename(columns={
-        "Datetime": "open_time",
-        "Open": "open",
-        "High": "high",
-        "Low": "low",
-        "Close": "close",
-        "Volume": "volume"
-    }, inplace=True)
+    if response.status_code != 200:
+        raise Exception(f"Binance Futures API error: {response.status_code}, response: {data}")
 
-    print(f"[fetch_ohlcv] Yahoo Finance'ten {len(df)} satır geldi")
+    print(f"[fetch_ohlcv] Binance Futures'tan {len(data)} satır geldi")
+
+    df = pd.DataFrame(data, columns=[
+        "open_time", "open", "high", "low", "close", "volume",
+        "close_time", "quote_asset_volume", "number_of_trades",
+        "taker_buy_base_asset_volume", "taker_buy_quote_asset_volume", "ignore"
+    ])
+
+    df["open_time"] = pd.to_datetime(df["open_time"], unit='ms')
+    df["open"] = df["open"].astype(float)
+    df["high"] = df["high"].astype(float)
+    df["low"] = df["low"].astype(float)
+    df["close"] = df["close"].astype(float)
+    df["volume"] = df["volume"].astype(float)
+
     print("[fetch_ohlcv] İlk 3 satır:\n", df.head(3))
 
     ti.xcom_push(key='ohlcv_df', value=df.to_json())
 
+# === 2. İndikatör Hesaplama ===
 def calculate_indicators(ti):
     df_json = ti.xcom_pull(key='ohlcv_df', task_ids='fetch_ohlcv')
     df = pd.read_json(df_json)
 
     print(f"[calculate_indicators] DataFrame boyut: {df.shape}")
 
+    # SMA, EMA
     df['sma'] = df['close'].rolling(window=14).mean()
     df['ema'] = df['close'].ewm(span=14, adjust=False).mean()
 
+    # RSI
     delta = df['close'].diff()
     gain = delta.where(delta > 0, 0)
     loss = -delta.where(delta < 0, 0)
@@ -47,6 +64,7 @@ def calculate_indicators(ti):
 
     ti.xcom_push(key='indicators_df', value=df.to_json())
 
+# === 3. Postgres'e Yazma ===
 def insert_to_postgres(ti):
     df_json = ti.xcom_pull(key='indicators_df', task_ids='calculate_indicators')
     df = pd.read_json(df_json)
@@ -98,6 +116,7 @@ def insert_to_postgres(ti):
 
     print(f"[insert_to_postgres] {len(records)} satır DB'ye işlendi ✅")
 
+# === DAG Tanımı ===
 default_args = {
     'owner': 'kagan',
     'depends_on_past': False,
@@ -106,7 +125,7 @@ default_args = {
 }
 
 with DAG(
-    dag_id='btc_technical_indicators',
+    dag_id='btc_futures_technical_indicators',
     schedule='*/5 * * * *',
     start_date=datetime(2025, 1, 1),
     catchup=False,
