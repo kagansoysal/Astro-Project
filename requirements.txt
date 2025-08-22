@@ -2,4 +2,4 @@ pandas
 requests
 psycopg2-binary
 ta
-yfinance==0.2.27
+yfinance==0.2.65
