@@ -7,7 +7,7 @@ import numpy as np
 import psycopg2
 from psycopg2.extras import execute_values
 
-def fetch_ohlcv(ti):
+def _fetch_ohlcv(ti):
     url = "https://api.binance.com/api/v3/klines"
     params = {
         "symbol": "BTCUSDT",
@@ -41,7 +41,7 @@ def fetch_ohlcv(ti):
 
     ti.xcom_push(key='ohlcv_df', value=df.to_json())
 
-def calculate_indicators(ti):
+def _calculate_indicators(ti):
     df_json = ti.xcom_pull(key='ohlcv_df', task_ids='fetch_ohlcv')
     df = pd.read_json(df_json)
 
@@ -62,7 +62,7 @@ def calculate_indicators(ti):
 
     ti.xcom_push(key='indicators_df', value=df.to_json())
 
-def insert_to_postgres(ti):
+def _insert_to_postgres(ti):
     df_json = ti.xcom_pull(key='indicators_df', task_ids='calculate_indicators')
     df = pd.read_json(df_json)
 
@@ -113,6 +113,10 @@ def insert_to_postgres(ti):
 
     print(f"[insert_to_postgres] {len(records)} satır DB'ye işlendi ✅")
 
+
+from airflow.decorators import dag, task
+from datetime import datetime, timedelta
+
 default_args = {
     'owner': 'kagan',
     'depends_on_past': False,
@@ -120,27 +124,31 @@ default_args = {
     'retry_delay': timedelta(minutes=1),
 }
 
-with DAG(
-    dag_id='btc_technical_indicators',
-    schedule='*/5 * * * *',
+@dag(
+    dag_id="btc_technical_indicators",
+    schedule_interval="*/5 * * * *",
     start_date=datetime(2025, 1, 1),
     catchup=False,
     default_args=default_args,
-) as dag:
+)
+def btc_pipeline():
 
-    fetch_task = PythonOperator(
-        task_id='fetch_ohlcv',
-        python_callable=fetch_ohlcv,
-    )
+    @task()
+    def fetch_ohlcv():
+        return _fetch_ohlcv()   # call your function
 
-    calc_task = PythonOperator(
-        task_id='calculate_indicators',
-        python_callable=calculate_indicators,
-    )
+    @task()
+    def calculate_indicators(df_json):
+        return _calculate_indicators(df_json)
 
-    insert_task = PythonOperator(
-        task_id='insert_to_postgres',
-        python_callable=insert_to_postgres,
-    )
+    @task()
+    def insert_to_postgres(df_json):
+        _insert_to_postgres(df_json)
 
-    fetch_task >> calc_task >> insert_task
+    # Define dependencies with function calls
+    raw_data = fetch_ohlcv()
+    indicators = calculate_indicators(raw_data)
+    insert_to_postgres(indicators)
+
+dag = btc_pipeline()
+
